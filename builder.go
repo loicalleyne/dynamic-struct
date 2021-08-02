@@ -43,6 +43,10 @@ type (
 		// dStruct := builder.Build()
 		//
 		Build() DynamicStruct
+		// 
+		//
+		//
+		BuildWithPkgPath(pkgPath string) DynamicStruct
 	}
 
 	// FieldConfig holds single field's definition.
