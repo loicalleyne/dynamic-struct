@@ -43,8 +43,13 @@ type (
 		// dStruct := builder.Build()
 		//
 		Build() DynamicStruct
-		// 
+		// BuildWithPkgPath returns definition for dynamic struct.
+		// Definition can be used to create new instances.
+		// This does the same as Build() except that it also adds
+		// PkgPath to every struct field (this is helpful for unexported
+		// fields)
 		//
+		// dStruct := builder.BuildWithPkgPath("github.com/xdevs23/dynamic-struct")
 		//
 		BuildWithPkgPath(pkgPath string) DynamicStruct
 	}
@@ -91,13 +96,12 @@ type (
 	}
 
 	builderImpl struct {
-		fields []*fieldConfigImpl
+		fields map[string]*fieldConfigImpl
 	}
 
 	fieldConfigImpl struct {
-		name string
-		typ  interface{}
-		tag  string
+		typ interface{}
+		tag string
 	}
 
 	dynamicStructImpl struct {
@@ -112,7 +116,7 @@ type (
 //
 func NewStruct() Builder {
 	return &builderImpl{
-		fields: []*fieldConfigImpl{},
+		fields: map[string]*fieldConfigImpl{},
 	}
 }
 
@@ -148,49 +152,38 @@ func MergeStructs(values ...interface{}) Builder {
 }
 
 func (b *builderImpl) AddField(name string, typ interface{}, tag string) Builder {
-	b.fields = append(b.fields, &fieldConfigImpl{
-		name: name,
-		typ:  typ,
-		tag:  tag,
-	})
+	b.fields[name] = &fieldConfigImpl{
+		typ: typ,
+		tag: tag,
+	}
 
 	return b
 }
 
 func (b *builderImpl) RemoveField(name string) Builder {
-	for i := range b.fields {
-		if b.fields[i].name == name {
-			b.fields = append(b.fields[:i], b.fields[i+1:]...)
-			break
-		}
-	}
+	delete(b.fields, name)
+
 	return b
 }
 
 func (b *builderImpl) HasField(name string) bool {
-	for i := range b.fields {
-		if b.fields[i].name == name {
-			return true
-		}
-	}
-	return false
+	_, ok := b.fields[name]
+	return ok
 }
 
 func (b *builderImpl) GetField(name string) FieldConfig {
-	for i := range b.fields {
-		if b.fields[i].name == name {
-			return b.fields[i]
-		}
+	if !b.HasField(name) {
+		return nil
 	}
-	return nil
+	return b.fields[name]
 }
 
 func (b *builderImpl) Build() DynamicStruct {
 	var structFields []reflect.StructField
 
-	for _, field := range b.fields {
+	for name, field := range b.fields {
 		structFields = append(structFields, reflect.StructField{
-			Name: field.name,
+			Name: name,
 			Type: reflect.TypeOf(field.typ),
 			Tag:  reflect.StructTag(field.tag),
 		})
@@ -204,17 +197,17 @@ func (b *builderImpl) Build() DynamicStruct {
 func (b *builderImpl) BuildWithPkgPath(pkgPath string) DynamicStruct {
 	var structFields []reflect.StructField
 
-	for _, field := range b.fields {
+	for name, field := range b.fields {
 		finalPkgPath := pkgPath
-		r, _ := utf8.DecodeRuneInString(field.name)
+		r, _ := utf8.DecodeRuneInString(name)
 		if unicode.IsUpper(r) {
 			// Upper case names are exported and thus must not have a PkgPath
 			finalPkgPath = ""
 		}
 		structFields = append(structFields, reflect.StructField{
-			Name:    field.name,
-			Type:    reflect.TypeOf(field.typ),
-			Tag:     reflect.StructTag(field.tag),
+			Name: name,
+			Type: reflect.TypeOf(field.typ),
+			Tag:  reflect.StructTag(field.tag),
 			PkgPath: finalPkgPath,
 		})
 	}
@@ -234,14 +227,14 @@ func (f *fieldConfigImpl) SetTag(tag string) FieldConfig {
 	return f
 }
 
-func (ds *dynamicStructImpl) New() interface{} {
+func (ds *dynamicStructImpl) New() interface{}  {
 	return reflect.New(ds.definition).Interface()
 }
 
-func (ds *dynamicStructImpl) NewSliceOfStructs() interface{} {
+func (ds *dynamicStructImpl) NewSliceOfStructs() interface{}  {
 	return reflect.New(reflect.SliceOf(ds.definition)).Interface()
 }
 
-func (ds *dynamicStructImpl) NewMapOfStructs(key interface{}) interface{} {
+func (ds *dynamicStructImpl) NewMapOfStructs(key interface{}) interface{}  {
 	return reflect.New(reflect.MapOf(reflect.Indirect(reflect.ValueOf(key)).Type(), ds.definition)).Interface()
 }
